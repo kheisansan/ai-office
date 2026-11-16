@@ -54,7 +54,7 @@
             <div class="actions">
               <button type="submit">キューに積む</button>
               <button type="button" id="queue-run" class="primary">今すぐ実行</button>
-              <label class="check"><input type="checkbox" id="queue-stub" checked /> stub-ai</label>
+              <label class="check"><input type="checkbox" id="queue-stub" /> stub-ai</label>
             </div>
           </form>
           <p class="hint">稼働ランプは部屋の取り込み担当に出るよ。</p>
@@ -72,7 +72,7 @@
             </label>
             <div class="actions">
               <button type="submit" class="primary">聞く</button>
-              <label class="check"><input type="checkbox" id="ask-stub" checked /> stub-ai</label>
+              <label class="check"><input type="checkbox" id="ask-stub" /> stub-ai</label>
             </div>
           </form>
           <div id="ask-result" class="answer-box md-view" hidden></div>
@@ -81,11 +81,13 @@
         </section>
 
         <section id="panel-review" class="panel" hidden>
-          <p class="lead">差分を見て、承認か差し戻し。</p>
+          <p class="lead">差分を見て、承認か差し戻し。差し戻し済みは削除して同じ URL を再投入できる。</p>
           <div class="review-layout">
             <div>
               <h3>承認待ち</h3>
               <ul class="plain" id="review-list"></ul>
+              <h3>差し戻し済み</h3>
+              <ul class="plain" id="rejected-list"></ul>
             </div>
             <div>
               <h3>差分</h3>

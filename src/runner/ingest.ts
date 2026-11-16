@@ -520,6 +520,31 @@ export async function rejectJob(
   return next;
 }
 
+/**
+ * Remove a rejected job directory so the same URL (same job id slug) can be enqueued again.
+ * Program-only; refuses non-rejected stages.
+ */
+export function deleteRejectedJob(
+  config: OfficeConfig,
+  jobId: string,
+): { id: string; deleted: true } {
+  const id = assertSafeJobId(jobId);
+  const queueRoot = path.join(config.dataDir, "queue");
+  const jobDir = assertSafeChildDir(queueRoot, id);
+  const statePath = path.join(jobDir, "state.json");
+  if (!fs.existsSync(statePath)) {
+    throw new Error(`Job not found: ${id}`);
+  }
+  const state = readJson<JobState>(statePath);
+  if (state.stage !== "rejected") {
+    throw new Error(
+      `Only rejected jobs can be deleted (id=${id}, stage=${state.stage})`,
+    );
+  }
+  fs.rmSync(jobDir, { recursive: true, force: true });
+  return { id, deleted: true };
+}
+
 export function getJobDiff(config: OfficeConfig, jobId: string): string {
   const id = assertSafeJobId(jobId);
   const jobDir = jobDirFor(config, id);

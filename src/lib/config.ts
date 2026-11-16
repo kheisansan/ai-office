@@ -75,13 +75,38 @@ function pick(
   return fallback;
 }
 
+/**
+ * Durable Status/settings keys: prefer settings.json over shell/demo env
+ * so one-off DATA_DIR / VAULT_PATH / AI_MODE does not shadow the saved office.
+ * Explicit loadConfig({ ... }) override still wins.
+ */
+function pickSettingsFirst(
+  sources: Record<string, string>,
+  key: string,
+  envName: string,
+  fromFile: string | number | undefined,
+  fallback: string,
+): string {
+  if (fromFile !== undefined && String(fromFile) !== "") {
+    sources[key] = "config/settings.json";
+    return String(fromFile);
+  }
+  const envVal = process.env[envName];
+  if (envVal !== undefined && envVal !== "") {
+    sources[key] = `env:${envName}`;
+    return envVal;
+  }
+  sources[key] = "default";
+  return fallback;
+}
+
 export function loadConfig(overrides: Partial<OfficeConfig> = {}): OfficeConfig {
   loadDotEnv();
   const file = loadSettingsFile();
   const sources: Record<string, string> = {};
 
   const vaultPath = overrides.vaultPath ??
-    pick(
+    pickSettingsFirst(
       sources,
       "vaultPath",
       "VAULT_PATH",
@@ -89,7 +114,7 @@ export function loadConfig(overrides: Partial<OfficeConfig> = {}): OfficeConfig 
       path.join(REPO_ROOT, "fixtures/sample-vault"),
     );
   const dataDir = overrides.dataDir ??
-    pick(
+    pickSettingsFirst(
       sources,
       "dataDir",
       "DATA_DIR",
@@ -111,7 +136,7 @@ export function loadConfig(overrides: Partial<OfficeConfig> = {}): OfficeConfig 
   const claudePath = overrides.claudePath ??
     pick(sources, "claudePath", "CLAUDE_PATH", file.claudePath, "claude");
   const aiModeRaw = overrides.aiMode ??
-    pick(sources, "aiMode", "AI_MODE", file.aiMode, "claude");
+    pickSettingsFirst(sources, "aiMode", "AI_MODE", file.aiMode, "claude");
   const aiMode: AiMode = aiModeRaw === "stub" ? "stub" : "claude";
   const weeklyIngestTokenBudget = overrides.weeklyIngestTokenBudget ??
     Number(
@@ -137,8 +162,17 @@ export function loadConfig(overrides: Partial<OfficeConfig> = {}): OfficeConfig 
   if (overrides.vaultPath) sources.vaultPath = "override";
   if (overrides.dataDir) sources.dataDir = "override";
 
+  let resolvedVault = path.resolve(vaultPath);
+  if (fs.existsSync(resolvedVault)) {
+    try {
+      resolvedVault = fs.realpathSync(resolvedVault);
+    } catch {
+      /* keep resolved */
+    }
+  }
+
   return {
-    vaultPath: path.resolve(vaultPath),
+    vaultPath: resolvedVault,
     dataDir: path.resolve(dataDir),
     ingestBatchLimit,
     ytDlpPath,
@@ -205,6 +239,8 @@ export function setVaultPath(config: OfficeConfig, rawPath: string): {
   const next: SettingsFile = { ...current, vaultPath: real };
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  // Settings already win over env for vaultPath; clear stale demo env anyway.
+  delete process.env.VAULT_PATH;
   config.vaultPath = real;
   config.sources = { ...config.sources, vaultPath: "config/settings.json" };
   return { vaultPath: real, hasWiki: true };

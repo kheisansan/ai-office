@@ -5,6 +5,7 @@ import { loadConfig } from "./lib/config.js";
 import { REPO_ROOT } from "./lib/paths.js";
 import {
   approveJob,
+  deleteRejectedJob,
   enqueueJob,
   getJobDiff,
   listQueueStates,
@@ -28,6 +29,7 @@ Usage:
   office diff <job-id>                  Show draft diff + checks
   office approve <job-id> [--comment…]  Apply approved draft to vault
   office reject <job-id> [--comment…]   Reject draft
+  office delete-rejected <job-id>       Delete rejected job (allows re-ingest)
   office status [job-id]                Queue list or one job state
   office ask "<question>" [options]     Answer from Wiki (citation-checked)
   office answer <ask-id>                Show saved answer.md
@@ -281,6 +283,18 @@ async function main(): Promise<void> {
     const comment = parseFlag(rest, "--comment") ?? "rejected";
     const state = await rejectJob(loadConfig(), jobId, comment);
     console.log(JSON.stringify({ ok: true, stage: state.stage, id: state.id }, null, 2));
+    return;
+  }
+
+  if (cmd === "delete-rejected") {
+    const jobId = rest[0];
+    if (!jobId) {
+      console.error("Usage: office delete-rejected <job-id>");
+      process.exitCode = 1;
+      return;
+    }
+    const result = deleteRejectedJob(loadConfig(), jobId);
+    console.log(JSON.stringify({ ok: true, ...result }, null, 2));
     return;
   }
 

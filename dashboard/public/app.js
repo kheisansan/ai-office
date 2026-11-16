@@ -449,11 +449,46 @@ async function selectReviewJob(id) {
 async function loadReview() {
   const data = await api("/queue");
   const waiting = (data.jobs || []).filter((j) => j.stage === "awaiting_approval");
+  const rejected = (data.jobs || []).filter((j) => j.stage === "rejected");
   $("#review-list").innerHTML = waiting
     .map((j) => `<li><button type="button" class="linkish" data-job="${esc(j.id)}">${esc(j.id)}</button><br/><small>${esc(j.url || "")}</small></li>`)
     .join("") || "<li>承認待ちなし</li>";
   $$("#review-list [data-job]").forEach((btn) => {
     btn.addEventListener("click", () => selectReviewJob(btn.dataset.job));
+  });
+  $("#rejected-list").innerHTML = rejected
+    .map(
+      (j) =>
+        `<li><button type="button" class="linkish" data-job="${esc(j.id)}">${esc(j.id)}</button>` +
+        ` <button type="button" class="danger-link" data-delete-rejected="${esc(j.id)}">削除</button>` +
+        `<br/><small>${esc(j.url || "")}</small></li>`,
+    )
+    .join("") || "<li>差し戻し済みなし</li>";
+  $$("#rejected-list [data-job]").forEach((btn) => {
+    btn.addEventListener("click", () => selectReviewJob(btn.dataset.job));
+  });
+  $$("#rejected-list [data-delete-rejected]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.deleteRejected;
+      if (!id || !confirm(`差し戻し済みジョブ ${id} を削除する？（同じ URL を再投入できるようになる）`)) {
+        return;
+      }
+      try {
+        await api(`/jobs/${encodeURIComponent(id)}/delete`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        toast(`deleted: ${id}`);
+        $("#review-form").hidden = true;
+        $("#review-diff").textContent = "ジョブを選んでください";
+        await loadReview();
+        await loadQueue();
+        await refreshRoleState();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
   });
 }
 

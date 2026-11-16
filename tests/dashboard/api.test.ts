@@ -104,6 +104,11 @@ source_url: https://youtu.be/abc123
   });
 
   it("updates vaultPath via Status API and rejects missing dirs / Wiki", async () => {
+    const settingsPath = path.join(REPO_ROOT, "config", "settings.json");
+    const settingsBackup = fs.existsSync(settingsPath)
+      ? fs.readFileSync(settingsPath, "utf8")
+      : null;
+    const prevVaultEnv = process.env.VAULT_PATH;
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai-office-vault-cfg-"));
     const vaultPath = path.join(root, "vault");
     const vault2 = path.join(root, "vault2");
@@ -119,29 +124,39 @@ source_url: https://youtu.be/abc123
     const config = loadConfig({ vaultPath, dataDir, aiMode: "stub" });
     const app = createDashboardApp(config);
 
-    await request(app)
-      .post("/api/config/vault")
-      .send({ vaultPath: path.join(root, "missing") })
-      .expect(400);
+    try {
+      await request(app)
+        .post("/api/config/vault")
+        .send({ vaultPath: path.join(root, "missing") })
+        .expect(400);
 
-    const noWikiRes = await request(app)
-      .post("/api/config/vault")
-      .send({ vaultPath: noWiki })
-      .expect(400);
-    expect(String(noWikiRes.body.error)).toMatch(/Wiki/);
+      const noWikiRes = await request(app)
+        .post("/api/config/vault")
+        .send({ vaultPath: noWiki })
+        .expect(400);
+      expect(String(noWikiRes.body.error)).toMatch(/Wiki/);
 
-    const ok = await request(app)
-      .post("/api/config/vault")
-      .send({ vaultPath: vault2 })
-      .expect(200);
-    expect(ok.body.ok).toBe(true);
-    expect(ok.body.hasWiki).toBe(true);
-    expect(path.basename(ok.body.vaultPath)).toBe("vault2");
-    expect(config.vaultPath).toBe(ok.body.vaultPath);
-    expect(fs.existsSync(path.join(config.vaultPath, "Wiki"))).toBe(true);
+      const ok = await request(app)
+        .post("/api/config/vault")
+        .send({ vaultPath: vault2 })
+        .expect(200);
+      expect(ok.body.ok).toBe(true);
+      expect(ok.body.hasWiki).toBe(true);
+      expect(path.basename(ok.body.vaultPath)).toBe("vault2");
+      expect(config.vaultPath).toBe(ok.body.vaultPath);
+      expect(fs.existsSync(path.join(config.vaultPath, "Wiki"))).toBe(true);
 
-    const cfg = await request(app).get("/api/config").expect(200);
-    expect(cfg.body.vaultPath).toBe(ok.body.vaultPath);
+      const cfg = await request(app).get("/api/config").expect(200);
+      expect(cfg.body.vaultPath).toBe(ok.body.vaultPath);
+    } finally {
+      if (settingsBackup !== null) {
+        fs.writeFileSync(settingsPath, settingsBackup, "utf8");
+      } else {
+        fs.writeFileSync(settingsPath, "{}\n", "utf8");
+      }
+      if (prevVaultEnv === undefined) delete process.env.VAULT_PATH;
+      else process.env.VAULT_PATH = prevVaultEnv;
+    }
   });
 
   it("rejects unsafe enqueue urls and non-local Host", async () => {

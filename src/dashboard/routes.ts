@@ -8,6 +8,7 @@ import { assertSafeIngestUrl } from "../lib/safe-url.js";
 import { readTextWithin } from "../lib/fsutil.js";
 import {
   approveJob,
+  deleteRejectedJob,
   enqueueJob,
   getJobDiff,
   processQueue,
@@ -107,6 +108,15 @@ export function createDashboardRouter(options: DashboardOptions): Router {
       const comment = String(req.body?.comment ?? "rejected via dashboard");
       const state = await rejectJob(config, req.params.id, comment);
       res.json({ ok: true, stage: state.stage, id: state.id });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post("/jobs/:id/delete", (req, res) => {
+    try {
+      const result = deleteRejectedJob(config, req.params.id);
+      res.json({ ok: true, ...result });
     } catch (err) {
       sendError(res, err);
     }
