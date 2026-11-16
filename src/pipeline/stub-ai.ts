@@ -125,14 +125,28 @@ updated: ${today}
   return wikiPath;
 }
 
+export type StubAnswerCandidate = {
+  id: string;
+  sourceUrl?: string;
+  kind?: "wiki" | "source";
+};
+
+function formatRefLine(c: StubAnswerCandidate): string {
+  if (c.sourceUrl) return `- [[${c.id}]] — ${c.sourceUrl}`;
+  return `- [[${c.id}]]`;
+}
+
 /** Phase 3 stand-in for answerer AI (no tokens). */
 export function stubAnswer(
   answerDir: string,
   question: string,
-  candidateIds: string[],
+  candidates: StubAnswerCandidate[] | string[],
   options: { attempt?: number } = {},
 ): string {
-  const primary = candidateIds[0];
+  const normalized: StubAnswerCandidate[] = candidates.map((c) =>
+    typeof c === "string" ? { id: c } : c,
+  );
+  const primary = normalized[0];
   const today = new Date().toISOString().slice(0, 10);
   const failFirst =
     process.env.AI_OFFICE_STUB_FAIL_FIRST_ANSWER === "1" &&
@@ -179,15 +193,19 @@ export function stubAnswer(
       "",
     ].join("\n");
   } else {
-    const refs = candidateIds.map((id) => `- [[${id}]]`).join("\n");
+    const refs = normalized.map(formatRefLine).join("\n");
+    const primaryCite = `[[${primary.id}]]`;
+    const originNote = primary.sourceUrl
+      ? `原典は ${primary.sourceUrl}（取り込みノート ${primaryCite}）。`
+      : `Wiki 上の関連記述は ${primaryCite} を中心にまとまっている。`;
     body = [
       "## 答え",
       "",
-      `質問「${question}」について、Wiki 上の関連記述は [[${primary}]] を中心にまとまっている。[[${primary}]]`,
+      `質問「${question}」について、${originNote}${primaryCite}`,
       "",
       "## Wiki で一部しか分からないこと",
       "",
-      `詳細な数値や最新版の差分は、候補ページだけでは足りない場合がある。[[${primary}]]`,
+      `詳細な数値や最新版の差分は、候補ページだけでは足りない場合がある。${primaryCite}`,
       "",
       "## Wiki に情報がないこと",
       "- 何が足りないか: 質問の周辺で Wiki に未取り込みの一次情報",
@@ -224,7 +242,7 @@ export function stubAnswer(
       "## 提案",
       "",
       primary
-        ? `- [[${primary}]] に、質問に対する短い FAQ 節を足す案（人が確認してから）`
+        ? `- [[${primary.id}]] に、質問に対する短い FAQ 節を足す案（人が確認してから）`
         : "- （候補なしのため追記先なし）",
       "",
     ].join("\n"),

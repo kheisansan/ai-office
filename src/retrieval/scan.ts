@@ -49,6 +49,27 @@ function asStringArray(value: unknown): string[] {
   return [];
 }
 
+function firstHttpUrl(text: string): string | undefined {
+  const m = text.match(/https?:\/\/[^\s)\]>"']+/i);
+  return m?.[0]?.replace(/[.,;:]+$/, "");
+}
+
+/** Prefer frontmatter source_url, then ## Sources section, then any URL in body. */
+export function extractSourceUrl(
+  fm: Record<string, unknown>,
+  body: string,
+): string | undefined {
+  for (const key of ["source_url", "sourceUrl", "url", "webpage_url"]) {
+    const v = fm[key];
+    if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) {
+      return v.trim();
+    }
+  }
+  const sourcesSection =
+    body.split(/^##\s*Sources\s*$/m)[1]?.split(/^##\s+/m)[0] ?? "";
+  return firstHttpUrl(sourcesSection) ?? firstHttpUrl(body);
+}
+
 function walkMarkdown(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   const out: string[] = [];
@@ -79,15 +100,22 @@ export function scanVaultPages(
       const id = path.basename(file, ".md");
       const titleMatch = body.match(/^#\s+(.+)$/m);
       const title = String(fm.title ?? titleMatch?.[1] ?? id);
+      const relPath = path.relative(vaultPath, file).replace(/\\/g, "/");
+      const kind: WikiPageDoc["kind"] = relPath.startsWith("Sources/")
+        ? "source"
+        : "wiki";
+      const sourceUrl = extractSourceUrl(fm, body);
       docs.push({
         id,
         path: file,
-        relPath: path.relative(vaultPath, file).replace(/\\/g, "/"),
+        relPath,
         title,
         aliases: asStringArray(fm.aliases),
         tags: asStringArray(fm.tags),
         body,
         updated: typeof fm.updated === "string" ? fm.updated : undefined,
+        kind,
+        sourceUrl,
       });
     }
   }

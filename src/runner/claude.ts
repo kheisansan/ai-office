@@ -169,7 +169,8 @@ export function buildAnswererPrompt(answerDir: string): string {
     "1. `question.json` と `candidates.json` を読む。",
     "2. `context/` 内の候補ページ本文を読む（候補以外は根拠にしない）。",
     "3. `answer.md` を指定の見出し構成で書く（各主張に [[ページ名]]）。",
-    "4. 不足があれば `draft/ingest-suggestions.md` と `draft/append-proposal.md` を更新してよい。",
-    "5. 書いたパスだけ短く報告する。Web検索しない。Vault を直接書き換えない。",
+    "4. Sources / YouTube 候補は `candidates.json` の `sourceUrl` を「参照したページ」に `[[id]] — https://...` で必ず書く。",
+    "5. 不足があれば `draft/ingest-suggestions.md` と `draft/append-proposal.md` を更新してよい。",
+    "6. 書いたパスだけ短く報告する。Web検索しない。Vault を直接書き換えない。",
   ].join("\n");
 }

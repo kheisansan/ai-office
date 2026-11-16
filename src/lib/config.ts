@@ -157,3 +157,34 @@ export function assertVaultReady(config: OfficeConfig): void {
     );
   }
 }
+
+function settingsFilePath(): string {
+  return path.join(REPO_ROOT, "config", "settings.json");
+}
+
+/** Validate and persist vaultPath to settings.json; mutates live config. */
+export function setVaultPath(config: OfficeConfig, rawPath: string): {
+  vaultPath: string;
+  hasWiki: boolean;
+} {
+  const trimmed = rawPath.trim();
+  if (!trimmed) throw new Error("vaultPath required");
+  const resolved = path.resolve(trimmed);
+  if (resolved.split(path.sep).some((p) => p.toLowerCase() === "openclaw")) {
+    throw new Error(`Refusing path containing OpenClaw: ${resolved}`);
+  }
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+    throw new Error(`Vault directory not found: ${resolved}`);
+  }
+  const hasWiki = fs.existsSync(path.join(resolved, "Wiki"));
+  const filePath = settingsFilePath();
+  const current: SettingsFile = fs.existsSync(filePath)
+    ? (JSON.parse(fs.readFileSync(filePath, "utf8")) as SettingsFile)
+    : {};
+  const next: SettingsFile = { ...current, vaultPath: resolved };
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  config.vaultPath = resolved;
+  config.sources = { ...config.sources, vaultPath: "config/settings.json" };
+  return { vaultPath: resolved, hasWiki };
+}

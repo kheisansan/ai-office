@@ -180,7 +180,16 @@ async function runAnswer(
   if (fs.existsSync(answerPath)) fs.unlinkSync(answerPath);
 
   if (mode === "stub") {
-    stubAnswer(answerDir, question, ids, { attempt });
+    stubAnswer(
+      answerDir,
+      question,
+      candidates.candidates.map((c) => ({
+        id: c.id,
+        sourceUrl: c.sourceUrl,
+        kind: c.kind,
+      })),
+      { attempt },
+    );
     return;
   }
 

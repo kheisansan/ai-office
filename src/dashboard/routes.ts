@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { Router, type Response } from "express";
 import type { OfficeConfig } from "../lib/config.js";
+import { setVaultPath } from "../lib/config.js";
+import { pickFolder } from "../lib/pick-folder.js";
 import { readText } from "../lib/fsutil.js";
 import {
   approveJob,
@@ -17,6 +19,7 @@ import {
   listAnswerJobs,
   listQueueJobs,
   officeSummary,
+  readWikiPage,
   summarizeUsage,
   wikiStats,
 } from "./aggregate.js";
@@ -173,6 +176,20 @@ export function createDashboardRouter(options: DashboardOptions): Router {
     });
   });
 
+  router.get("/wiki/:name", (req, res) => {
+    const name = decodeURIComponent(String(req.params.name ?? "")).trim();
+    if (!name) {
+      res.status(400).json({ ok: false, error: "name required" });
+      return;
+    }
+    const page = readWikiPage(config.vaultPath, name);
+    if (!page) {
+      res.status(404).json({ ok: false, error: `wiki page not found: ${name}` });
+      return;
+    }
+    res.json({ ok: true, ...page });
+  });
+
   router.get("/usage", (_req, res) => {
     res.json({ ok: true, ...summarizeUsage(config) });
   });
@@ -186,8 +203,37 @@ export function createDashboardRouter(options: DashboardOptions): Router {
       ingestBatchLimit: config.ingestBatchLimit,
       weeklyIngestTokenBudget: config.weeklyIngestTokenBudget,
       weeklyAskTokenBudget: config.weeklyAskTokenBudget,
-      note: "Paths are read-only in the dashboard (phase 4).",
+      note: "vaultPath can be updated from Status; dataDir remains env/settings only.",
     });
+  });
+
+  router.post("/config/vault", (req, res) => {
+    try {
+      const vaultPath = String(req.body?.vaultPath ?? "").trim();
+      const result = setVaultPath(config, vaultPath);
+      res.json({
+        ok: true,
+        ...result,
+        warning: result.hasWiki
+          ? undefined
+          : "Wiki/ folder not found under vault (path saved anyway)",
+      });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post("/config/vault/browse", async (_req, res) => {
+    try {
+      const selected = await pickFolder({ defaultPath: config.vaultPath });
+      if (!selected) {
+        res.json({ ok: true, cancelled: true });
+        return;
+      }
+      res.json({ ok: true, cancelled: false, vaultPath: selected });
+    } catch (err) {
+      sendError(res, err, 500);
+    }
   });
 
   return router;

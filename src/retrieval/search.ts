@@ -85,6 +85,8 @@ function scoreDoc(doc: WikiPageDoc, tokens: string[], question: string): Candida
     score,
     reasons: [...new Set(reasons)].slice(0, 8),
     excerpts,
+    kind: doc.kind,
+    sourceUrl: doc.sourceUrl,
   };
 }
 

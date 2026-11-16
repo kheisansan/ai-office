@@ -10,3 +10,4 @@
 | [0006](0006-wiki-categories-in-harness.md) | Wiki categories in harness |
 | [0007](0007-ask-grounded-rag.md) | Grounded ask / citation verify |
 | [0008](0008-dashboard-express-static.md) | Dashboard = Express + static UI |
+| [0009](0009-office-spatial-ui.md) | Office spatial UI (hotspots + panels) |

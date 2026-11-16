@@ -7,6 +7,10 @@ export type WikiPageDoc = {
   tags: string[];
   body: string;
   updated?: string;
+  /** wiki page vs ingested source note */
+  kind: "wiki" | "source";
+  /** External origin URL when kind is source (YouTube / article). */
+  sourceUrl?: string;
 };
 
 export type CandidateHit = {
@@ -18,6 +22,8 @@ export type CandidateHit = {
   reasons: string[];
   /** Excerpt snippets for the answerer */
   excerpts: string[];
+  kind: "wiki" | "source";
+  sourceUrl?: string;
 };
 
 export type CandidatesFile = {

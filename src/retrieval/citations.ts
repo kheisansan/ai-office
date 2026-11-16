@@ -108,20 +108,32 @@ export function verifyCitations(
     }
   }
 
-  // External http(s) URLs used as grounding in claim sections are banned
+  const allowedSourceUrls = new Set(
+    candidates
+      .map((c) => c.sourceUrl?.trim())
+      .filter((u): u is string => Boolean(u && /^https?:\/\//i.test(u))),
+  );
+
+  // External URLs in claim sections: only candidate source_url is allowed
   for (const name of claimSections) {
     const body = sections[name] ?? "";
-    if (/https?:\/\//i.test(body)) {
+    const urls = body.match(/https?:\/\/[^\s)\]>"']+/gi) ?? [];
+    for (const url of urls) {
+      const cleaned = url.replace(/[.,;:]+$/, "");
+      const ok = allowedSourceUrls.has(cleaned);
       checks.push({
-        id: `external-url:${name}`,
-        ok: false,
-        message: "external URL used in claim section",
+        id: `external-url:${name}:${cleaned}`,
+        ok,
+        message: ok
+          ? "candidate source URL"
+          : "external URL used in claim section (not a candidate source_url)",
       });
     }
   }
 
-  // 参照したページ must only list candidates
-  const refs = extractWikilinks(sections["## 参照したページ"] ?? "");
+  // 参照したページ must only list candidates; source notes must include their URL
+  const refSection = sections["## 参照したページ"] ?? "";
+  const refs = extractWikilinks(refSection);
   for (const link of refs) {
     checks.push({
       id: `ref:${link}`,
@@ -129,6 +141,29 @@ export function verifyCitations(
       message: allowed.has(link)
         ? "ok"
         : `referenced [[${link}]] not in candidates`,
+    });
+  }
+  for (const c of candidates) {
+    if (!c.sourceUrl || !refs.includes(c.id)) continue;
+    const listed = refSection.includes(c.sourceUrl);
+    checks.push({
+      id: `ref-url:${c.id}`,
+      ok: listed,
+      message: listed
+        ? `source URL listed for [[${c.id}]]`
+        : `source candidate [[${c.id}]] must list URL ${c.sourceUrl} in 参照したページ`,
+    });
+  }
+  const refUrls = refSection.match(/https?:\/\/[^\s)\]>"']+/gi) ?? [];
+  for (const url of refUrls) {
+    const cleaned = url.replace(/[.,;:]+$/, "");
+    const ok = allowedSourceUrls.has(cleaned);
+    checks.push({
+      id: `ref-ext:${cleaned}`,
+      ok,
+      message: ok
+        ? "source URL matches candidate"
+        : `URL in 参照したページ is not a candidate source_url: ${cleaned}`,
     });
   }
 

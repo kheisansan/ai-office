@@ -6,131 +6,161 @@
   <title>AI Office</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="shell">
-    <header class="top">
-      <div class="brand-block">
-        <p class="brand">AI Office</p>
-        <p class="tagline" id="tagline">ローカル知識管理デスク</p>
+  <div class="office-app">
+    <div class="scene-wrap">
+      <div class="scene" id="scene" aria-label="オフィス俯瞰">
+        <img class="room-bg" src="/assets/room.jpg" alt="" width="1024" height="576" />
+
+        <button type="button" class="hotspot hotspot-board" data-panel="review" aria-label="承認ディスプレイを開く">
+          <img src="/assets/prop-approval.png" alt="" class="prop-art prop-approval" />
+          <span class="status-dot" id="dot-board" data-state="idle"></span>
+        </button>
+
+        <button type="button" class="hotspot hotspot-monitor" data-panel="status" aria-label="Status モニターを開く">
+          <img src="/assets/prop-status.png" alt="" class="prop-art prop-status" />
+        </button>
+
+        <button type="button" class="hotspot hotspot-emp emp-ingest" data-panel="ingest" aria-label="取り込み担当を開く">
+          <img src="/assets/emp-ingest.png" alt="" class="emp-art" />
+          <span class="emp-name">取り込み</span>
+          <span class="status-dot" id="dot-ingest" data-state="idle"></span>
+        </button>
+
+        <button type="button" class="hotspot hotspot-emp emp-answer" data-panel="ask" aria-label="検索デスクを開く">
+          <img src="/assets/emp-answer.png" alt="" class="emp-art" />
+          <span class="emp-name">検索</span>
+          <span class="status-dot" id="dot-ask" data-state="idle"></span>
+        </button>
       </div>
-      <nav class="nav" role="tablist" aria-label="画面">
-        <button type="button" data-tab="office" class="nav-btn is-active" role="tab" aria-selected="true">OFFICE</button>
-        <button type="button" data-tab="queue" class="nav-btn" role="tab">QUEUE</button>
-        <button type="button" data-tab="ask" class="nav-btn" role="tab">ASK</button>
-        <button type="button" data-tab="review" class="nav-btn" role="tab">REVIEW</button>
-        <button type="button" data-tab="knowledge" class="nav-btn" role="tab">KNOWLEDGE</button>
-        <button type="button" data-tab="usage" class="nav-btn" role="tab">USAGE</button>
-      </nav>
-    </header>
+    </div>
 
-    <main>
-      <section id="panel-office" class="panel is-active" role="tabpanel">
-        <h1 class="hero-brand">AI Office</h1>
-        <p class="lead">取り込みと回答を、承認付きで回すデスク。</p>
-        <div class="stat-row" id="office-stats"></div>
-        <div class="grid-2">
-          <div>
-            <h2>社員ステータス</h2>
-            <ul class="plain" id="office-roles"></ul>
-          </div>
-          <div>
-            <h2>直近ログ</h2>
-            <pre class="log" id="office-log"></pre>
-          </div>
-        </div>
-        <h2>最近の動き</h2>
-        <ul class="plain" id="office-recent"></ul>
-      </section>
-
-      <section id="panel-queue" class="panel" role="tabpanel" hidden>
-        <h1>QUEUE</h1>
-        <p class="lead">受付から承認待ちまでをカンバン表示。</p>
-        <div class="actions">
-          <form id="enqueue-form" class="inline-form">
-            <input name="url" type="url" required placeholder="https://youtu.be/…" />
-            <button type="submit">キューに積む</button>
+    <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden aria-hidden="true">
+      <div class="drawer-head">
+        <h2 id="drawer-title">パネル</h2>
+        <button type="button" class="drawer-close" id="drawer-close" aria-label="閉じる">×</button>
+      </div>
+      <div class="drawer-body">
+        <section id="panel-ingest" class="panel" hidden>
+          <p class="lead">URL を積んで、取り込みを回すデスク。</p>
+          <form id="enqueue-form" class="stack-form">
+            <label>
+              URL
+              <input name="url" type="url" required placeholder="https://youtu.be/…" />
+            </label>
+            <div class="actions">
+              <button type="submit">キューに積む</button>
+              <button type="button" id="queue-run" class="primary">今すぐ実行</button>
+              <label class="check"><input type="checkbox" id="queue-stub" checked /> stub-ai</label>
+            </div>
           </form>
-          <button type="button" id="queue-run" class="primary">今すぐ実行</button>
-          <label class="check"><input type="checkbox" id="queue-stub" checked /> stub-ai</label>
+          <p class="hint">稼働ランプは部屋の取り込み担当に出るよ。</p>
+          <div class="mini-stats" id="ingest-stats"></div>
+          <h3>最近のジョブ</h3>
+          <ul class="plain" id="office-recent"></ul>
+        </section>
+
+        <section id="panel-ask" class="panel" hidden>
+          <p class="lead">Wiki だけを根拠に聞く。出典は機械検証。</p>
+          <form id="ask-form" class="stack-form">
+            <label>
+              質問
+              <textarea name="question" rows="3" required placeholder="質問を書く…"></textarea>
+            </label>
+            <div class="actions">
+              <button type="submit" class="primary">聞く</button>
+              <label class="check"><input type="checkbox" id="ask-stub" checked /> stub-ai</label>
+            </div>
+          </form>
+          <div id="ask-result" class="answer-box md-view" hidden></div>
+          <h3>過去の質問</h3>
+          <ul class="plain" id="ask-list"></ul>
+        </section>
+
+        <section id="panel-review" class="panel" hidden>
+          <p class="lead">差分を見て、承認か差し戻し。</p>
+          <div class="review-layout">
+            <div>
+              <h3>承認待ち</h3>
+              <ul class="plain" id="review-list"></ul>
+            </div>
+            <div>
+              <h3>差分</h3>
+              <pre class="diff" id="review-diff">ジョブを選んでください</pre>
+              <form id="review-form" class="stack-form" hidden>
+                <input type="hidden" name="jobId" />
+                <input name="comment" placeholder="コメント（任意）" />
+                <div class="actions">
+                  <button type="submit" name="decision" value="approve" class="primary">承認</button>
+                  <button type="submit" name="decision" value="reject" class="danger">差し戻し</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section id="panel-status" class="panel" hidden>
+          <p class="lead">キューの流れとトークン、Wiki の様子。Vault パスもここで設定できる。</p>
+          <h3>LLM Wiki（Vault）</h3>
+          <form id="vault-form" class="stack-form">
+            <label>
+              Vault パス
+              <input name="vaultPath" id="vault-path-input" type="text" required placeholder="/path/to/LLM-Wiki" autocomplete="off" />
+            </label>
+            <p class="hint" id="vault-hint">Obsidian の LLM Wiki フォルダを指定。保存するとすぐに反映される。</p>
+            <div class="actions">
+              <button type="button" id="vault-browse">フォルダを選ぶ</button>
+              <button type="submit" class="primary">保存</button>
+            </div>
+          </form>
+          <h3>QUEUE</h3>
+          <div class="kanban" id="kanban"></div>
+          <h3>USAGE</h3>
+          <div id="usage-bars" class="stat-row"></div>
+          <table class="table" id="usage-table">
+            <thead><tr><th>日</th><th>ingest</th><th>ask</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <h3>KNOWLEDGE</h3>
+          <div id="knowledge-stats" class="stat-row"></div>
+          <div class="grid-2">
+            <div>
+              <h4>カテゴリ</h4>
+              <ul class="plain" id="knowledge-cats"></ul>
+            </div>
+            <div>
+              <h4>情報がないと答えた話題</h4>
+              <ul class="plain" id="knowledge-gaps"></ul>
+            </div>
+          </div>
+          <h3>直近ログ</h3>
+          <pre class="log" id="office-log"></pre>
+        </section>
+      </div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="scrim scrim-wiki" id="wiki-scrim" hidden></div>
+    <aside class="drawer wiki-drawer" id="wiki-drawer" role="dialog" aria-modal="true" aria-labelledby="wiki-title" hidden aria-hidden="true">
+      <div class="drawer-head">
+        <div>
+          <h2 id="wiki-title">Wiki</h2>
+          <p class="wiki-path" id="wiki-path"></p>
         </div>
-        <p class="lead" style="font-size:0.85rem">integrated / summarized などは処理中の一時状態。終わると awaiting_approval か needs_human に移る。</p>
-        <div class="kanban" id="kanban"></div>
-      </section>
-
-      <section id="panel-ask" class="panel" role="tabpanel" hidden>
-        <h1>ASK</h1>
-        <p class="lead">Wiki だけを根拠に聞く。出典は機械検証。</p>
-        <form id="ask-form" class="stack-form">
-          <textarea name="question" rows="3" required placeholder="質問を書く…"></textarea>
-          <div class="actions">
-            <button type="submit" class="primary">聞く</button>
-            <label class="check"><input type="checkbox" id="ask-stub" checked /> stub-ai</label>
-          </div>
-        </form>
-        <div id="ask-result" class="answer-box" hidden></div>
-        <h2>過去の質問</h2>
-        <ul class="plain" id="ask-list"></ul>
-      </section>
-
-      <section id="panel-review" class="panel" role="tabpanel" hidden>
-        <h1>REVIEW</h1>
-        <p class="lead">差分を見て、承認か差し戻し。</p>
-        <div class="grid-2">
-          <div>
-            <h2>承認待ち</h2>
-            <ul class="plain" id="review-list"></ul>
-          </div>
-          <div>
-            <h2>差分</h2>
-            <pre class="diff" id="review-diff">ジョブを選んでください</pre>
-            <form id="review-form" class="stack-form" hidden>
-              <input type="hidden" name="jobId" />
-              <input name="comment" placeholder="コメント（任意）" />
-              <div class="actions">
-                <button type="submit" name="decision" value="approve" class="primary">承認</button>
-                <button type="submit" name="decision" value="reject" class="danger">差し戻し</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </section>
-
-      <section id="panel-knowledge" class="panel" role="tabpanel" hidden>
-        <h1>KNOWLEDGE</h1>
-        <p class="lead">Wiki の状態と、足りない話題。</p>
-        <div id="knowledge-stats" class="stat-row"></div>
-        <div class="grid-2">
-          <div>
-            <h2>カテゴリ</h2>
-            <ul class="plain" id="knowledge-cats"></ul>
-            <h2>リンク切れ（最大50）</h2>
-            <ul class="plain" id="knowledge-broken"></ul>
-          </div>
-          <div>
-            <h2>情報がないと答えた話題</h2>
-            <ul class="plain" id="knowledge-gaps"></ul>
-          </div>
-        </div>
-      </section>
-
-      <section id="panel-usage" class="panel" role="tabpanel" hidden>
-        <h1>USAGE</h1>
-        <p class="lead">取り込みと質問のトークン。予算は設定の週次上限。</p>
-        <div id="usage-bars" class="stat-row"></div>
-        <h2>日ごと</h2>
-        <table class="table" id="usage-table">
-          <thead><tr><th>日</th><th>ingest</th><th>ask</th></tr></thead>
-          <tbody></tbody>
-        </table>
-        <h2>直近イベント</h2>
-        <ul class="plain" id="usage-events"></ul>
-      </section>
-    </main>
-
-    <footer class="foot" id="foot"></footer>
+        <button type="button" class="drawer-close" id="wiki-close" aria-label="Wikiを閉じる">×</button>
+      </div>
+      <div class="drawer-body">
+        <p class="source-banner" id="wiki-source-banner" hidden>
+          <span>原典:</span>
+          <a id="wiki-source-link" class="ext-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+        </p>
+        <div id="wiki-content" class="answer-box md-view wiki-body"></div>
+      </div>
+    </aside>
   </div>
   <div id="toast" class="toast" hidden></div>
   <script src="/app.js" type="module"></script>

@@ -72,6 +72,43 @@ describe("phase3 retrieval + ask", () => {
     );
   });
 
+  it("requires sourceUrl in 参照したページ for source candidates", () => {
+    const cand = {
+      id: "YT-demo",
+      path: "",
+      relPath: "Sources/Videos/YT-demo.md",
+      title: "YT demo",
+      score: 1,
+      reasons: [],
+      excerpts: [],
+      kind: "source" as const,
+      sourceUrl: "https://youtu.be/demo123",
+    };
+    const missingUrl = `## 答え
+
+要約。[[YT-demo]]
+
+## Wiki に情報がないこと
+- なし
+
+## 参照したページ
+- [[YT-demo]]
+`;
+    expect(verifyCitations(missingUrl, [cand]).ok).toBe(false);
+
+    const withUrl = `## 答え
+
+要約。[[YT-demo]]
+
+## Wiki に情報がないこと
+- なし
+
+## 参照したページ
+- [[YT-demo]] — https://youtu.be/demo123
+`;
+    expect(verifyCitations(withUrl, [cand]).ok).toBe(true);
+  });
+
   it("prefers Wiki over Sources when basenames collide", () => {
     const config = tempConfig();
     const sourcesDir = path.join(config.vaultPath, "Sources", "Articles");
@@ -98,7 +135,17 @@ describe("phase3 retrieval + ask", () => {
 ## 参照したページ
 - （なし）
 `;
-    const checks = verifyCitations(bad, [{ id: "LLM Wiki", path: "", relPath: "", title: "LLM Wiki", score: 1, reasons: [], excerpts: [] }]);
+    const wikiCand = {
+      id: "LLM Wiki",
+      path: "",
+      relPath: "Wiki/AI/LLM Wiki.md",
+      title: "LLM Wiki",
+      score: 1,
+      reasons: [],
+      excerpts: [],
+      kind: "wiki" as const,
+    };
+    const checks = verifyCitations(bad, [wikiCand]);
     expect(checks.ok).toBe(false);
 
     const withUrl = `## 答え
@@ -111,7 +158,7 @@ describe("phase3 retrieval + ask", () => {
 ## 参照したページ
 - [[LLM Wiki]]
 `;
-    expect(verifyCitations(withUrl, [{ id: "LLM Wiki", path: "", relPath: "", title: "x", score: 1, reasons: [], excerpts: [] }]).ok).toBe(false);
+    expect(verifyCitations(withUrl, [{ ...wikiCand, title: "x" }]).ok).toBe(false);
   });
 
   it("runAsk stub answers with citations and appends QUERY log", async () => {

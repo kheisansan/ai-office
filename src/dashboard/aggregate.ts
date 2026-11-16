@@ -249,6 +249,55 @@ export function summarizeUsage(config: OfficeConfig): UsageSummary {
   };
 }
 
+export type WikiPage = {
+  name: string;
+  relPath: string;
+  content: string;
+  kind: "wiki" | "source";
+  sourceUrl?: string;
+};
+
+function extractPageSourceUrl(content: string): string | undefined {
+  const fm = content.match(/^---\n([\s\S]*?)\n---/);
+  if (fm) {
+    for (const key of ["source_url", "sourceUrl", "url", "webpage_url"]) {
+      const line = fm[1].split("\n").find((l) => l.startsWith(`${key}:`));
+      if (!line) continue;
+      const v = line.slice(key.length + 1).trim();
+      if (/^https?:\/\//i.test(v)) return v;
+    }
+  }
+  const sources =
+    content.split(/^##\s*Sources\s*$/m)[1]?.split(/^##\s+/m)[0] ?? "";
+  return sources.match(/https?:\/\/[^\s)\]>"']+/i)?.[0];
+}
+
+/** Resolve Wiki or Sources page by basename. Rejects path traversal. */
+export function readWikiPage(vaultPath: string, pageName: string): WikiPage | null {
+  const wanted = pageName.trim();
+  if (!wanted || /[/\\]|\.\./.test(wanted)) return null;
+  const roots: Array<{ dir: string; kind: "wiki" | "source"; prefix: string }> = [
+    { dir: path.join(vaultPath, "Wiki"), kind: "wiki", prefix: "Wiki/" },
+    { dir: path.join(vaultPath, "Sources"), kind: "source", prefix: "Sources/" },
+  ];
+  for (const root of roots) {
+    const files = walkFiles(root.dir).filter((f) => f.endsWith(".md"));
+    const match = files.find((f) => path.basename(f, ".md") === wanted);
+    if (!match) continue;
+    const relPath = path.relative(vaultPath, match).replace(/\\/g, "/");
+    if (!relPath.startsWith(root.prefix) || relPath.includes("..")) continue;
+    const content = fs.readFileSync(match, "utf8");
+    return {
+      name: wanted,
+      relPath,
+      content,
+      kind: root.kind,
+      sourceUrl: extractPageSourceUrl(content),
+    };
+  }
+  return null;
+}
+
 export function wikiStats(vaultPath: string): WikiStats {
   const wikiRoot = path.join(vaultPath, "Wiki");
   const cats = listWikiCategories(vaultPath);
