@@ -4,7 +4,8 @@ import { Router, type Response } from "express";
 import type { OfficeConfig } from "../lib/config.js";
 import { setVaultPath } from "../lib/config.js";
 import { pickFolder } from "../lib/pick-folder.js";
-import { readText } from "../lib/fsutil.js";
+import { assertSafeIngestUrl } from "../lib/safe-url.js";
+import { readTextWithin } from "../lib/fsutil.js";
 import {
   approveJob,
   enqueueJob,
@@ -36,6 +37,7 @@ function sendError(res: Response, err: unknown, code = 400): void {
 export function createDashboardRouter(options: DashboardOptions): Router {
   const router = Router();
   const { config } = options;
+  let browseInFlight = false;
 
   router.get("/office", (_req, res) => {
     res.json({ ok: true, ...officeSummary(config) });
@@ -52,13 +54,9 @@ export function createDashboardRouter(options: DashboardOptions): Router {
 
   router.post("/queue/enqueue", async (req, res) => {
     try {
-      const url = String(req.body?.url ?? "").trim();
-      if (!url) {
-        res.status(400).json({ ok: false, error: "url required" });
-        return;
-      }
+      const safe = await assertSafeIngestUrl(String(req.body?.url ?? ""));
       const state = enqueueJob(config, {
-        url,
+        url: safe.href,
         jobId: req.body?.jobId ? String(req.body.jobId) : undefined,
         note: req.body?.note ? String(req.body.note) : undefined,
       });
@@ -130,9 +128,11 @@ export function createDashboardRouter(options: DashboardOptions): Router {
         state,
         answer,
         ingestSuggestions: fs.existsSync(suggestionsPath)
-          ? readText(suggestionsPath)
+          ? readTextWithin(suggestionsPath, answerDir)
           : "",
-        appendProposal: fs.existsSync(proposalPath) ? readText(proposalPath) : "",
+        appendProposal: fs.existsSync(proposalPath)
+          ? readTextWithin(proposalPath, answerDir)
+          : "",
       });
     } catch (err) {
       sendError(res, err, 404);
@@ -153,8 +153,9 @@ export function createDashboardRouter(options: DashboardOptions): Router {
         aiMode: stub ? "stub" : undefined,
         silent: true,
       });
+      const answerDir = path.dirname(result.answerPath);
       const answer = fs.existsSync(result.answerPath)
-        ? readText(result.answerPath)
+        ? readTextWithin(result.answerPath, answerDir)
         : "";
       res.json({
         ok: result.checksOk,
@@ -211,19 +212,18 @@ export function createDashboardRouter(options: DashboardOptions): Router {
     try {
       const vaultPath = String(req.body?.vaultPath ?? "").trim();
       const result = setVaultPath(config, vaultPath);
-      res.json({
-        ok: true,
-        ...result,
-        warning: result.hasWiki
-          ? undefined
-          : "Wiki/ folder not found under vault (path saved anyway)",
-      });
+      res.json({ ok: true, ...result });
     } catch (err) {
       sendError(res, err);
     }
   });
 
   router.post("/config/vault/browse", async (_req, res) => {
+    if (browseInFlight) {
+      res.status(409).json({ ok: false, error: "folder picker already open" });
+      return;
+    }
+    browseInFlight = true;
     try {
       const selected = await pickFolder({ defaultPath: config.vaultPath });
       if (!selected) {
@@ -233,6 +233,8 @@ export function createDashboardRouter(options: DashboardOptions): Router {
       res.json({ ok: true, cancelled: false, vaultPath: selected });
     } catch (err) {
       sendError(res, err, 500);
+    } finally {
+      browseInFlight = false;
     }
   });
 

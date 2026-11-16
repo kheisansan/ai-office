@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJson, writeText } from "../lib/fsutil.js";
+import { assertSafeIngestUrl } from "../lib/safe-url.js";
 
 export type FetchInput = {
   jobDir: string;
@@ -121,43 +122,27 @@ async function downloadOneLang(
   outTemplate: string,
   lang: string,
 ): Promise<boolean> {
-  const result = await runCommand(
-    ytDlp,
-    [
-      "--skip-download",
-      "--no-warnings",
-      "--write-auto-subs",
-      "--write-subs",
-      "--sub-langs",
-      lang,
-      "--sub-format",
-      "vtt/srt/best",
-      "-o",
-      outTemplate,
-      url,
-    ],
-    rawDir,
-  );
+  const subArgs = [
+    "--ignore-config",
+    "--skip-download",
+    "--no-warnings",
+    "--no-playlist",
+    "--write-auto-subs",
+    "--write-subs",
+    "--sub-langs",
+    lang,
+    "--sub-format",
+    "vtt/srt/best",
+    "-o",
+    outTemplate,
+    "--",
+    url,
+  ];
+  const result = await runCommand(ytDlp, subArgs, rawDir);
   if (findSubtitleFile(rawDir)) return true;
   if (/429/.test(result.stderr) || /Too Many Requests/i.test(result.stderr)) {
     await sleep(2500);
-    const retry = await runCommand(
-      ytDlp,
-      [
-        "--skip-download",
-        "--no-warnings",
-        "--write-auto-subs",
-        "--write-subs",
-        "--sub-langs",
-        lang,
-        "--sub-format",
-        "vtt/srt/best",
-        "-o",
-        outTemplate,
-        url,
-      ],
-      rawDir,
-    );
+    const retry = await runCommand(ytDlp, subArgs, rawDir);
     if (findSubtitleFile(rawDir)) return true;
     if (retry.code !== 0) return false;
   }
@@ -168,12 +153,21 @@ async function fetchWithYtDlp(
   input: FetchInput,
   rawDir: string,
 ): Promise<FetchResult> {
+  const safe = await assertSafeIngestUrl(input.url);
   const ytDlp = input.ytDlpPath ?? "yt-dlp";
   const outTemplate = path.join(rawDir, "source");
 
   const metaResult = await runCommand(
     ytDlp,
-    ["--skip-download", "--no-warnings", "-J", input.url],
+    [
+      "--ignore-config",
+      "--skip-download",
+      "--no-warnings",
+      "--no-playlist",
+      "-J",
+      "--",
+      safe.href,
+    ],
     rawDir,
   );
   if (metaResult.code !== 0) {
@@ -196,7 +190,7 @@ async function fetchWithYtDlp(
   let downloaded = false;
   const errors: string[] = [];
   for (const lang of langs) {
-    const ok = await downloadOneLang(ytDlp, input.url, rawDir, outTemplate, lang);
+    const ok = await downloadOneLang(ytDlp, safe.href, rawDir, outTemplate, lang);
     if (ok) {
       downloaded = true;
       break;
@@ -227,12 +221,12 @@ async function fetchWithYtDlp(
   writeText(transcriptPath, `${transcript}\n`);
   const metadataPath = path.join(rawDir, "metadata.json");
   writeJson(metadataPath, {
-    url: input.url,
+    url: safe.href,
     title,
     id: meta.id,
     duration: meta.duration,
     chapters: meta.chapters ?? [],
-    webpage_url: meta.webpage_url ?? input.url,
+    webpage_url: meta.webpage_url ?? safe.href,
     fetchedAt: new Date().toISOString(),
     mode: "yt-dlp",
     subtitleFile: path.basename(subFile),

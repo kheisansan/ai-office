@@ -2,7 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import type { OfficeConfig } from "../lib/config.js";
 import { assertVaultReady } from "../lib/config.js";
-import { assertSafeChildDir, assertSafeJobId, ensureDir, readJson, writeJson } from "../lib/fsutil.js";
+import {
+  assertSafeChildDir,
+  assertSafeJobId,
+  ensureDir,
+  readJson,
+  readTextWithin,
+  writeJson,
+  writeText,
+} from "../lib/fsutil.js";
 import { notify } from "../lib/notify.js";
 import { applyDraft } from "../pipeline/apply.js";
 import { fetchSource } from "../pipeline/fetch.js";
@@ -114,7 +122,7 @@ function writeVerifyFeedback(jobDir: string, checks: ChecksFile, attempt: number
     ...failing.map((c) => `- ${c.id}: ${c.message}`),
     "",
   ].join("\n");
-  fs.writeFileSync(path.join(jobDir, "verify-feedback.md"), body, "utf8");
+  writeText(path.join(jobDir, "verify-feedback.md"), body);
 }
 
 async function runIntegrate(
@@ -131,7 +139,7 @@ async function runIntegrate(
   stageVaultContext(jobDir, config.vaultPath, candidates);
   const feedbackPath = path.join(jobDir, "verify-feedback.md");
   const feedback = fs.existsSync(feedbackPath)
-    ? fs.readFileSync(feedbackPath, "utf8")
+    ? readTextWithin(feedbackPath, jobDir)
     : "";
   const prompt = [
     buildIntegratorPrompt(jobDir),
@@ -335,7 +343,7 @@ export async function runIngest(
   state = afterIntegrate;
 
   const diff = formatJobDiff(jobDir);
-  fs.writeFileSync(path.join(jobDir, "diff.md"), diff, "utf8");
+  writeText(path.join(jobDir, "diff.md"), diff);
 
   if (!options.silent) {
     if (state.stage === "awaiting_approval") {
@@ -516,7 +524,13 @@ export function getJobDiff(config: OfficeConfig, jobId: string): string {
   const id = assertSafeJobId(jobId);
   const jobDir = jobDirFor(config, id);
   const diffPath = path.join(jobDir, "diff.md");
-  if (fs.existsSync(diffPath)) return fs.readFileSync(diffPath, "utf8");
+  if (fs.existsSync(diffPath)) {
+    try {
+      return readTextWithin(diffPath, jobDir);
+    } catch {
+      return formatJobDiff(jobDir);
+    }
+  }
   return formatJobDiff(jobDir);
 }
 

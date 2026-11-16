@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathHasOpenClaw, writeJson } from "../lib/fsutil.js";
+import { pathHasOpenClaw, readTextWithin, writeJson } from "../lib/fsutil.js";
 import {
   draftWikiCategories,
   ensureWikiCategoriesFile,
@@ -13,6 +13,7 @@ function listMarkdownFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   const out: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...listMarkdownFiles(full));
     else if (entry.name.endsWith(".md")) out.push(full);
@@ -54,7 +55,17 @@ export function verifyDraft(jobDir: string, vaultPath: string): ChecksFile {
       checks.push({ id: `openclaw:${rel}`, ok: false, message: "OpenClaw path" });
     }
     if (file.endsWith(".patch")) continue;
-    const text = fs.readFileSync(file, "utf8");
+    let text: string;
+    try {
+      text = readTextWithin(file, draftDir);
+    } catch (err) {
+      checks.push({
+        id: `unsafe:${rel}`,
+        ok: false,
+        message: err instanceof Error ? err.message : "unsafe draft file",
+      });
+      continue;
+    }
     checks.push({
       id: `frontmatter:${rel}`,
       ok: hasFrontmatter(text),
@@ -129,7 +140,12 @@ export function verifyDraft(jobDir: string, vaultPath: string): ChecksFile {
   const linkRe = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
   for (const file of mdFiles) {
     if (file.endsWith(".patch")) continue;
-    const text = fs.readFileSync(file, "utf8");
+    let text: string;
+    try {
+      text = readTextWithin(file, draftDir);
+    } catch {
+      continue;
+    }
     let m: RegExpExecArray | null;
     while ((m = linkRe.exec(text)) !== null) {
       const name = m[1].trim();

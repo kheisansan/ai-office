@@ -39,7 +39,10 @@ function esc(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+    .replaceAll("`", "&#96;");
 }
 
 function stripFrontmatter(src) {
@@ -54,8 +57,19 @@ function isHttpUrl(s) {
   return /^https?:\/\//i.test(String(s ?? "").trim());
 }
 
+function safeHref(url) {
+  try {
+    const u = new URL(String(url).trim());
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
 function extLinkHtml(url, label = url) {
-  const href = String(url).trim();
+  const href = safeHref(url);
+  if (!href) return esc(label);
   return `<a class="ext-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
 }
 
@@ -212,9 +226,12 @@ function openWikiPage(name) {
       $("#wiki-title").textContent = data.name;
       $("#wiki-path").textContent = `${data.kind || "wiki"} · ${data.relPath}`;
       if (data.sourceUrl) {
-        banner.hidden = false;
-        sourceLink.href = data.sourceUrl;
-        sourceLink.textContent = data.sourceUrl;
+        const href = safeHref(data.sourceUrl);
+        if (href) {
+          banner.hidden = false;
+          sourceLink.href = href;
+          sourceLink.textContent = data.sourceUrl;
+        }
       }
       showAnswer(body, data.content || "(empty)");
     })
@@ -248,7 +265,15 @@ document.addEventListener("click", (e) => {
   openWikiPage(target);
 });
 
+function readDragOffset(drawer) {
+  const x = parseFloat(getComputedStyle(drawer).getPropertyValue("--drag-x")) || 0;
+  const y = parseFloat(getComputedStyle(drawer).getPropertyValue("--drag-y")) || 0;
+  return { x, y };
+}
+
 function resetDrawerPosition(drawer) {
+  drawer.style.setProperty("--drag-x", "0px");
+  drawer.style.setProperty("--drag-y", "0px");
   drawer.style.left = "";
   drawer.style.top = "";
   drawer.style.transform = "";
@@ -259,39 +284,42 @@ function enableDrawerDrag(drawer, handle) {
   let dragging = false;
   let startX = 0;
   let startY = 0;
-  let originLeft = 0;
-  let originTop = 0;
+  let originX = 0;
+  let originY = 0;
 
   handle.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     if (e.target.closest("button, a, input, textarea")) return;
-    const rect = drawer.getBoundingClientRect();
-    drawer.classList.add("is-dragged");
-    drawer.style.left = `${rect.left}px`;
-    drawer.style.top = `${rect.top}px`;
-    drawer.style.transform = "none";
+    const offset = readDragOffset(drawer);
     dragging = true;
     startX = e.clientX;
     startY = e.clientY;
-    originLeft = rect.left;
-    originTop = rect.top;
+    originX = offset.x;
+    originY = offset.y;
+    drawer.classList.add("is-dragged");
     handle.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
 
   handle.addEventListener("pointermove", (e) => {
     if (!dragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    const maxLeft = window.innerWidth - 80;
-    const maxTop = window.innerHeight - 48;
-    drawer.style.left = `${Math.min(maxLeft, Math.max(8, originLeft + dx))}px`;
-    drawer.style.top = `${Math.min(maxTop, Math.max(8, originTop + dy))}px`;
+    let nextX = originX + (e.clientX - startX);
+    let nextY = originY + (e.clientY - startY);
+    drawer.style.setProperty("--drag-x", `${nextX}px`);
+    drawer.style.setProperty("--drag-y", `${nextY}px`);
+    const rect = drawer.getBoundingClientRect();
+    if (rect.left < 8) nextX += 8 - rect.left;
+    if (rect.top < 8) nextY += 8 - rect.top;
+    if (rect.right > window.innerWidth - 8) nextX -= rect.right - (window.innerWidth - 8);
+    if (rect.bottom > window.innerHeight - 8) nextY -= rect.bottom - (window.innerHeight - 8);
+    drawer.style.setProperty("--drag-x", `${nextX}px`);
+    drawer.style.setProperty("--drag-y", `${nextY}px`);
   });
 
   const endDrag = (e) => {
     if (!dragging) return;
     dragging = false;
+    drawer.classList.remove("is-dragged");
     try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   };
   handle.addEventListener("pointerup", endDrag);
@@ -310,6 +338,11 @@ function setEmpBusy(panel, busy) {
   btn.classList.toggle("is-idle", !busy);
 }
 
+function clearPanelHash() {
+  if (!location.hash) return;
+  history.replaceState(null, "", location.pathname + location.search);
+}
+
 function openPanel(name) {
   const drawer = $("#drawer");
   const scrim = $("#scrim");
@@ -324,7 +357,6 @@ function openPanel(name) {
     p.classList.toggle("is-active", on);
     p.hidden = !on;
   });
-  location.hash = name;
   loadPanel(name).catch((e) => toast(e.message));
 }
 
@@ -335,6 +367,7 @@ function closePanel() {
   drawer.classList.remove("is-open");
   drawer.setAttribute("aria-hidden", "true");
   scrim.hidden = true;
+  clearPanelHash();
   setTimeout(() => {
     if (!drawer.classList.contains("is-open")) drawer.hidden = true;
   }, 220);
@@ -639,9 +672,7 @@ $("#vault-browse").addEventListener("click", async () => {
 });
 
 refreshRoleState().catch((e) => toast(e.message));
-
-const hash = (location.hash || "").replace("#", "");
-if (hash && PANEL_TITLES[hash]) openPanel(hash);
+clearPanelHash();
 
 setInterval(() => {
   refreshRoleState().catch(() => {});

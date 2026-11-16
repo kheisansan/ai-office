@@ -103,10 +103,11 @@ source_url: https://youtu.be/abc123
     expect(source.body.relPath).toBe("Sources/Videos/YT-Hermes.md");
   });
 
-  it("updates vaultPath via Status API and rejects missing dirs", async () => {
+  it("updates vaultPath via Status API and rejects missing dirs / Wiki", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai-office-vault-cfg-"));
     const vaultPath = path.join(root, "vault");
     const vault2 = path.join(root, "vault2");
+    const noWiki = path.join(root, "no-wiki");
     const dataDir = path.join(root, "data");
     fs.cpSync(path.join(REPO_ROOT, "fixtures/sample-vault"), vaultPath, {
       recursive: true,
@@ -114,6 +115,7 @@ source_url: https://youtu.be/abc123
     fs.cpSync(path.join(REPO_ROOT, "fixtures/sample-vault"), vault2, {
       recursive: true,
     });
+    fs.mkdirSync(noWiki, { recursive: true });
     const config = loadConfig({ vaultPath, dataDir, aiMode: "stub" });
     const app = createDashboardApp(config);
 
@@ -122,15 +124,48 @@ source_url: https://youtu.be/abc123
       .send({ vaultPath: path.join(root, "missing") })
       .expect(400);
 
+    const noWikiRes = await request(app)
+      .post("/api/config/vault")
+      .send({ vaultPath: noWiki })
+      .expect(400);
+    expect(String(noWikiRes.body.error)).toMatch(/Wiki/);
+
     const ok = await request(app)
       .post("/api/config/vault")
       .send({ vaultPath: vault2 })
       .expect(200);
     expect(ok.body.ok).toBe(true);
-    expect(ok.body.vaultPath).toBe(path.resolve(vault2));
-    expect(config.vaultPath).toBe(path.resolve(vault2));
+    expect(ok.body.hasWiki).toBe(true);
+    expect(path.basename(ok.body.vaultPath)).toBe("vault2");
+    expect(config.vaultPath).toBe(ok.body.vaultPath);
+    expect(fs.existsSync(path.join(config.vaultPath, "Wiki"))).toBe(true);
 
     const cfg = await request(app).get("/api/config").expect(200);
-    expect(cfg.body.vaultPath).toBe(path.resolve(vault2));
+    expect(cfg.body.vaultPath).toBe(ok.body.vaultPath);
+  });
+
+  it("rejects unsafe enqueue urls and non-local Host", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai-office-sec-"));
+    const vaultPath = path.join(root, "vault");
+    const dataDir = path.join(root, "data");
+    fs.cpSync(path.join(REPO_ROOT, "fixtures/sample-vault"), vaultPath, {
+      recursive: true,
+    });
+    const app = createDashboardApp(loadConfig({ vaultPath, dataDir, aiMode: "stub" }));
+
+    await request(app)
+      .post("/api/queue/enqueue")
+      .send({ url: "http://127.0.0.1/secret" })
+      .expect(400);
+
+    await request(app)
+      .post("/api/queue/enqueue")
+      .send({ url: "--dump-json" })
+      .expect(400);
+
+    await request(app)
+      .get("/api/office")
+      .set("Host", "evil.example")
+      .expect(403);
   });
 });

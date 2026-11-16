@@ -1,16 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { readText, writeText } from "../lib/fsutil.js";
+import { readTextWithin, writeText } from "../lib/fsutil.js";
 
 export type PrepareResult = {
   preparedPath: string;
   charCount: number;
 };
 
-/** Strip timestamps / duplicate lines and write prepared.md */
+/** Strip timestamps / duplicate lines and write prepared.md. Called from ingest.ts. */
 export function prepareTranscript(jobDir: string): PrepareResult {
   const rawPath = path.join(jobDir, "raw", "transcript.txt");
-  const lines = readText(rawPath)
+  const lines = readTextWithin(rawPath, jobDir)
     .split("\n")
     .map((l) => l.replace(/^\d{1,2}:\d{2}(?::\d{2})?\s*/, "").trim())
     .filter(Boolean);
@@ -22,7 +22,9 @@ export function prepareTranscript(jobDir: string): PrepareResult {
   }
 
   const descPath = path.join(jobDir, "raw", "description.txt");
-  const description = fs.existsSync(descPath) ? readText(descPath).trim() : "";
+  const description = fs.existsSync(descPath)
+    ? readTextWithin(descPath, jobDir).trim()
+    : "";
 
   const parts = [`# Prepared transcript`, ``, deduped.join("\n\n")];
   if (description) {

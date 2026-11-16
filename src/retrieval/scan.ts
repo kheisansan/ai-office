@@ -49,35 +49,53 @@ function asStringArray(value: unknown): string[] {
   return [];
 }
 
-function firstHttpUrl(text: string): string | undefined {
-  const m = text.match(/https?:\/\/[^\s)\]>"']+/i);
-  return m?.[0]?.replace(/[.,;:]+$/, "");
-}
-
-/** Prefer frontmatter source_url, then ## Sources section, then any URL in body. */
+/**
+ * Trusted source URL = harness-written frontmatter only.
+ * Do not scrape ## Sources / body (third-party controllable).
+ */
 export function extractSourceUrl(
   fm: Record<string, unknown>,
-  body: string,
+  _body?: string,
 ): string | undefined {
   for (const key of ["source_url", "sourceUrl", "url", "webpage_url"]) {
     const v = fm[key];
     if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) {
-      return v.trim();
+      return v.trim().replace(/[.,;:]+$/, "");
     }
   }
-  const sourcesSection =
-    body.split(/^##\s*Sources\s*$/m)[1]?.split(/^##\s+/m)[0] ?? "";
-  return firstHttpUrl(sourcesSection) ?? firstHttpUrl(body);
+  return undefined;
 }
 
-function walkMarkdown(dir: string): string[] {
+function walkMarkdown(dir: string, vaultRoot: string): string[] {
   if (!fs.existsSync(dir)) return [];
+  let rootReal: string;
+  let dirReal: string;
+  try {
+    rootReal = fs.realpathSync(vaultRoot);
+    dirReal = fs.realpathSync(dir);
+  } catch {
+    return [];
+  }
+  if (!(dirReal === rootReal || dirReal.startsWith(rootReal + path.sep))) return [];
   const out: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith(".")) continue;
     const full = path.join(dir, entry.name);
     if (pathHasOpenClaw(full)) continue;
-    if (entry.isDirectory()) out.push(...walkMarkdown(full));
+    if (entry.isSymbolicLink()) {
+      try {
+        const real = fs.realpathSync(full);
+        if (pathHasOpenClaw(real)) continue;
+        if (!(real === rootReal || real.startsWith(rootReal + path.sep))) continue;
+        const st = fs.statSync(real);
+        if (st.isDirectory()) out.push(...walkMarkdown(full, vaultRoot));
+        else if (entry.name.endsWith(".md")) out.push(full);
+      } catch {
+        /* skip broken / unreadable links */
+      }
+      continue;
+    }
+    if (entry.isDirectory()) out.push(...walkMarkdown(full, vaultRoot));
     else if (entry.name.endsWith(".md")) out.push(full);
   }
   return out;
@@ -94,7 +112,7 @@ export function scanVaultPages(
   }
   const docs: WikiPageDoc[] = [];
   for (const root of roots) {
-    for (const file of walkMarkdown(root)) {
+    for (const file of walkMarkdown(root, vaultPath)) {
       const text = fs.readFileSync(file, "utf8");
       const { fm, body } = parseSimpleFrontmatter(text);
       const id = path.basename(file, ".md");

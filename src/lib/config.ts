@@ -170,21 +170,42 @@ export function setVaultPath(config: OfficeConfig, rawPath: string): {
   const trimmed = rawPath.trim();
   if (!trimmed) throw new Error("vaultPath required");
   const resolved = path.resolve(trimmed);
-  if (resolved.split(path.sep).some((p) => p.toLowerCase() === "openclaw")) {
-    throw new Error(`Refusing path containing OpenClaw: ${resolved}`);
-  }
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
     throw new Error(`Vault directory not found: ${resolved}`);
   }
-  const hasWiki = fs.existsSync(path.join(resolved, "Wiki"));
+  let real: string;
+  try {
+    real = fs.realpathSync(resolved);
+  } catch {
+    throw new Error(`Vault directory not readable: ${resolved}`);
+  }
+  if (real.split(path.sep).some((p) => p.toLowerCase() === "openclaw")) {
+    throw new Error(`Refusing path containing OpenClaw: ${real}`);
+  }
+  if (real === path.parse(real).root) {
+    throw new Error("Vault path must not be filesystem root");
+  }
+  const wikiDir = path.join(real, "Wiki");
+  if (!fs.existsSync(wikiDir) || !fs.statSync(wikiDir).isDirectory()) {
+    throw new Error(`Vault must contain a Wiki/ subdirectory: ${wikiDir}`);
+  }
+  let wikiReal: string;
+  try {
+    wikiReal = fs.realpathSync(wikiDir);
+  } catch {
+    throw new Error(`Wiki/ directory not readable: ${wikiDir}`);
+  }
+  if (!(wikiReal === real || wikiReal.startsWith(real + path.sep))) {
+    throw new Error(`Wiki/ must resolve inside the vault (refusing symlink escape): ${wikiReal}`);
+  }
   const filePath = settingsFilePath();
   const current: SettingsFile = fs.existsSync(filePath)
     ? (JSON.parse(fs.readFileSync(filePath, "utf8")) as SettingsFile)
     : {};
-  const next: SettingsFile = { ...current, vaultPath: resolved };
+  const next: SettingsFile = { ...current, vaultPath: real };
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-  config.vaultPath = resolved;
+  config.vaultPath = real;
   config.sources = { ...config.sources, vaultPath: "config/settings.json" };
-  return { vaultPath: resolved, hasWiki };
+  return { vaultPath: real, hasWiki: true };
 }

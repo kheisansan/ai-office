@@ -1,6 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ensureDir, readJson, writeJson } from "./fsutil.js";
+import {
+  assertReadablePathWithin,
+  assertSafeWriteTarget,
+  ensureDir,
+  readJson,
+  writeJson,
+} from "./fsutil.js";
 
 export type WikiCategory = {
   id: string;
@@ -48,9 +54,24 @@ export function scanWikiCategoryFolders(vaultPath: string): string[] {
 export function loadWikiCategoriesFile(vaultPath: string): WikiCategoriesFile | null {
   const file = wikiCategoriesPath(vaultPath);
   if (!fs.existsSync(file)) return null;
+  try {
+    assertReadablePathWithin(file, vaultPath);
+  } catch {
+    return null;
+  }
+  if (fs.lstatSync(file).isSymbolicLink()) return null;
   const data = readJson<WikiCategoriesFile>(file);
   if (!data || data.version !== 1 || !Array.isArray(data.categories)) return null;
   return data;
+}
+
+function assertWritableCategoriesFile(vaultPath: string): string {
+  const file = wikiCategoriesPath(vaultPath);
+  if (fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink()) {
+    throw new Error(`Refusing symlink wiki-categories.json: ${file}`);
+  }
+  assertSafeWriteTarget(file, [vaultPath]);
+  return file;
 }
 
 /** Ensure harness file exists; seed from Wiki folders if missing. */
@@ -58,6 +79,11 @@ export function ensureWikiCategoriesFile(vaultPath: string): WikiCategoriesFile 
   const existing = loadWikiCategoriesFile(vaultPath);
   if (existing) return existing;
 
+  const file = wikiCategoriesPath(vaultPath);
+  if (fs.existsSync(file)) {
+    // Unreadable (e.g. symlink) — never write-through to the target.
+    throw new Error(`Refusing to overwrite unsafe wiki-categories.json: ${file}`);
+  }
   const seeded: WikiCategoriesFile = {
     version: 1,
     updatedAt: new Date().toISOString(),
@@ -66,8 +92,8 @@ export function ensureWikiCategoriesFile(vaultPath: string): WikiCategoriesFile 
       description: "",
     })),
   };
-  const file = wikiCategoriesPath(vaultPath);
   ensureDir(path.dirname(file));
+  assertWritableCategoriesFile(vaultPath);
   writeJson(file, seeded);
   return seeded;
 }
@@ -134,6 +160,7 @@ export function syncWikiCategoriesFromVault(
   }
   file.categories.sort((a, b) => a.id.localeCompare(b.id));
   file.updatedAt = new Date().toISOString();
-  writeJson(wikiCategoriesPath(vaultPath), file);
+  const out = assertWritableCategoriesFile(vaultPath);
+  writeJson(out, file);
   return { added, file };
 }

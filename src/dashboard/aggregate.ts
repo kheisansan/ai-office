@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { OfficeConfig } from "../lib/config.js";
-import { readJson, readText, writeJson } from "../lib/fsutil.js";
+import { pathHasOpenClaw, readJson, readText, readTextWithin, writeJson } from "../lib/fsutil.js";
 import { listWikiCategories } from "../lib/wiki-layout.js";
 import type { JobState } from "../pipeline/types.js";
 import type { AskState } from "../retrieval/types.js";
@@ -49,13 +49,37 @@ export type GapTopic = {
   snippet: string;
 };
 
-function walkFiles(dir: string): string[] {
+function walkFiles(dir: string, vaultRoot?: string): string[] {
   if (!fs.existsSync(dir)) return [];
+  const root = vaultRoot ?? dir;
+  let rootReal: string;
+  let dirReal: string;
+  try {
+    rootReal = fs.realpathSync(root);
+    dirReal = fs.realpathSync(dir);
+  } catch {
+    return [];
+  }
+  if (!(dirReal === rootReal || dirReal.startsWith(rootReal + path.sep))) return [];
   const out: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith(".")) continue;
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walkFiles(full));
+    if (pathHasOpenClaw(full)) continue;
+    if (entry.isSymbolicLink()) {
+      try {
+        const real = fs.realpathSync(full);
+        if (pathHasOpenClaw(real)) continue;
+        if (!(real === rootReal || real.startsWith(rootReal + path.sep))) continue;
+        const st = fs.statSync(real);
+        if (st.isDirectory()) out.push(...walkFiles(full, root));
+        else out.push(full);
+      } catch {
+        /* skip */
+      }
+      continue;
+    }
+    if (entry.isDirectory()) out.push(...walkFiles(full, root));
     else out.push(full);
   }
   return out;
@@ -259,17 +283,14 @@ export type WikiPage = {
 
 function extractPageSourceUrl(content: string): string | undefined {
   const fm = content.match(/^---\n([\s\S]*?)\n---/);
-  if (fm) {
-    for (const key of ["source_url", "sourceUrl", "url", "webpage_url"]) {
-      const line = fm[1].split("\n").find((l) => l.startsWith(`${key}:`));
-      if (!line) continue;
-      const v = line.slice(key.length + 1).trim();
-      if (/^https?:\/\//i.test(v)) return v;
-    }
+  if (!fm) return undefined;
+  for (const key of ["source_url", "sourceUrl", "url", "webpage_url"]) {
+    const line = fm[1].split("\n").find((l) => l.startsWith(`${key}:`));
+    if (!line) continue;
+    const v = line.slice(key.length + 1).trim();
+    if (/^https?:\/\//i.test(v)) return v.replace(/[.,;:]+$/, "");
   }
-  const sources =
-    content.split(/^##\s*Sources\s*$/m)[1]?.split(/^##\s+/m)[0] ?? "";
-  return sources.match(/https?:\/\/[^\s)\]>"']+/i)?.[0];
+  return undefined;
 }
 
 /** Resolve Wiki or Sources page by basename. Rejects path traversal. */
@@ -281,9 +302,10 @@ export function readWikiPage(vaultPath: string, pageName: string): WikiPage | nu
     { dir: path.join(vaultPath, "Sources"), kind: "source", prefix: "Sources/" },
   ];
   for (const root of roots) {
-    const files = walkFiles(root.dir).filter((f) => f.endsWith(".md"));
+    const files = walkFiles(root.dir, vaultPath).filter((f) => f.endsWith(".md"));
     const match = files.find((f) => path.basename(f, ".md") === wanted);
     if (!match) continue;
+    if (pathHasOpenClaw(match)) continue;
     const relPath = path.relative(vaultPath, match).replace(/\\/g, "/");
     if (!relPath.startsWith(root.prefix) || relPath.includes("..")) continue;
     const content = fs.readFileSync(match, "utf8");
@@ -301,7 +323,7 @@ export function readWikiPage(vaultPath: string, pageName: string): WikiPage | nu
 export function wikiStats(vaultPath: string): WikiStats {
   const wikiRoot = path.join(vaultPath, "Wiki");
   const cats = listWikiCategories(vaultPath);
-  const pages = walkFiles(wikiRoot).filter((f) => f.endsWith(".md"));
+  const pages = walkFiles(wikiRoot, vaultPath).filter((f) => f.endsWith(".md"));
   const pageNames = new Set(pages.map((f) => path.basename(f, ".md")));
   const brokenLinks: Array<{ page: string; target: string }> = [];
   const inbound = new Map<string, number>();
@@ -337,10 +359,16 @@ export function gapTopics(config: OfficeConfig): GapTopic[] {
   if (!fs.existsSync(answersDir)) return [];
   const out: GapTopic[] = [];
   for (const id of fs.readdirSync(answersDir)) {
-    const answerPath = path.join(answersDir, id, "answer.md");
-    const statePath = path.join(answersDir, id, "state.json");
+    const answerDir = path.join(answersDir, id);
+    const answerPath = path.join(answerDir, "answer.md");
+    const statePath = path.join(answerDir, "state.json");
     if (!fs.existsSync(answerPath) || !fs.existsSync(statePath)) continue;
-    const answer = readText(answerPath);
+    let answer: string;
+    try {
+      answer = readTextWithin(answerPath, answerDir);
+    } catch {
+      continue;
+    }
     if (!/Wiki に情報がない|情報がない/.test(answer)) continue;
     const state = readJson<AskState>(statePath);
     const section = answer.split("## Wiki に情報がないこと")[1]?.split("## ")[0] ?? "";

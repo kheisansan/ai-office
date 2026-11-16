@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ensureDir, pathHasOpenClaw, writeJson, writeText } from "../lib/fsutil.js";
+import {
+  assertReadablePathWithin,
+  copyFileWithin,
+  ensureDir,
+  pathHasOpenClaw,
+  readTextWithin,
+  writeJson,
+  writeText,
+} from "../lib/fsutil.js";
 import {
   ensureWikiCategoriesFile,
   listWikiCategories,
@@ -47,10 +55,20 @@ export function stageVaultContext(
   ensureDir(contextDir);
 
   const indexSrc = path.join(vaultPath, "index.md");
+  const indexDest = path.join(contextDir, "index.md");
   if (fs.existsSync(indexSrc)) {
-    fs.copyFileSync(indexSrc, path.join(contextDir, "index.md"));
+    try {
+      assertReadablePathWithin(indexSrc, vaultPath);
+      if (fs.lstatSync(indexSrc).isSymbolicLink()) {
+        writeText(indexDest, "# (index.md symlink skipped)\n");
+      } else {
+        copyFileWithin(indexSrc, vaultPath, indexDest, [contextDir]);
+      }
+    } catch {
+      writeText(indexDest, "# (index.md unreadable / outside vault)\n");
+    }
   } else {
-    writeText(path.join(contextDir, "index.md"), "# (no index.md in vault)\n");
+    writeText(indexDest, "# (no index.md in vault)\n");
   }
 
   ensureWikiCategoriesFile(vaultPath);
@@ -63,10 +81,44 @@ export function stageVaultContext(
     const stageRoot = (rootName: "Wiki" | "Sources"): void => {
       const root = path.join(vaultPath, rootName);
       if (!fs.existsSync(root)) return;
+      let vaultReal: string;
+      let rootReal: string;
+      try {
+        vaultReal = fs.realpathSync(vaultPath);
+        rootReal = fs.realpathSync(root);
+      } catch {
+        return;
+      }
+      if (!(rootReal === vaultReal || rootReal.startsWith(vaultReal + path.sep))) return;
       const walk = (dir: string): void => {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
           const full = path.join(dir, entry.name);
           if (pathHasOpenClaw(full)) continue;
+          if (entry.isSymbolicLink()) {
+            try {
+              const real = fs.realpathSync(full);
+              if (pathHasOpenClaw(real)) continue;
+              if (!(real === vaultReal || real.startsWith(vaultReal + path.sep))) continue;
+              const st = fs.statSync(real);
+              if (st.isDirectory()) walk(full);
+              else if (entry.name.endsWith(".md")) {
+                const base = path.basename(entry.name, ".md");
+                if (!wanted.has(base)) continue;
+                const rel = path.relative(root, full);
+                // Symlink pages: only copy when target stays in vault; never follow as source symlink into context via copyFileSync
+                const dest = path.join(contextDir, rootName, rel);
+                try {
+                  copyFileWithin(full, vaultPath, dest, [contextDir]);
+                  copied.push(`${rootName}/${rel.replace(/\\/g, "/")}`);
+                } catch {
+                  /* skip unsafe */
+                }
+              }
+            } catch {
+              /* skip */
+            }
+            continue;
+          }
           if (entry.isDirectory()) {
             walk(full);
             continue;
@@ -76,9 +128,12 @@ export function stageVaultContext(
           if (!wanted.has(base)) continue;
           const rel = path.relative(root, full);
           const dest = path.join(contextDir, rootName, rel);
-          ensureDir(path.dirname(dest));
-          fs.copyFileSync(full, dest);
-          copied.push(`${rootName}/${rel.replace(/\\/g, "/")}`);
+          try {
+            copyFileWithin(full, vaultPath, dest, [contextDir]);
+            copied.push(`${rootName}/${rel.replace(/\\/g, "/")}`);
+          } catch {
+            /* skip unsafe */
+          }
         }
       };
       walk(root);
@@ -103,14 +158,24 @@ export function stageVaultContext(
 
 /** Naive candidate page names from Source draft text / title tokens. */
 export function guessCandidatePages(jobDir: string, limit = 8): string[] {
-  const sourcesDir = path.join(jobDir, "draft", "Sources");
+  const draftRoot = path.join(jobDir, "draft");
+  const sourcesDir = path.join(draftRoot, "Sources");
   const textParts: string[] = [];
   const walk = (dir: string): void => {
     if (!fs.existsSync(dir)) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue;
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith(".md")) textParts.push(fs.readFileSync(full, "utf8"));
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.name.endsWith(".md")) continue;
+      try {
+        textParts.push(readTextWithin(full, draftRoot));
+      } catch {
+        /* skip symlink/hardlink/escape */
+      }
     }
   };
   walk(sourcesDir);

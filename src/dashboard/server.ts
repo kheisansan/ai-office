@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import type { OfficeConfig } from "../lib/config.js";
 import { REPO_ROOT } from "../lib/paths.js";
 import { createDashboardRouter } from "./routes.js";
+import { dashboardSecurityMiddleware } from "./security.js";
 
 export type ServeOptions = {
   config: OfficeConfig;
@@ -13,6 +14,7 @@ export type ServeOptions = {
 
 export function createDashboardApp(config: OfficeConfig) {
   const app = express();
+  app.use(dashboardSecurityMiddleware);
   app.use(express.json({ limit: "1mb" }));
   app.use("/api", createDashboardRouter({ config }));
   const publicDir = path.join(REPO_ROOT, "dashboard", "public");

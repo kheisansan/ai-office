@@ -282,6 +282,8 @@ body {
 }
 
 .drawer {
+  --drag-x: 0px;
+  --drag-y: 0px;
   position: fixed;
   top: 50%;
   left: 50%;
@@ -293,21 +295,20 @@ body {
   border-radius: 16px;
   display: flex;
   flex-direction: column;
-  transform: translate(-50%, -46%) scale(0.96);
+  transform: translate(calc(-50% + var(--drag-x)), calc(-46% + var(--drag-y))) scale(0.96);
   opacity: 0;
   pointer-events: none;
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
 
 .drawer.is-open {
-  transform: translate(-50%, -50%) scale(1);
+  transform: translate(calc(-50% + var(--drag-x)), calc(-50% + var(--drag-y))) scale(1);
   opacity: 1;
   pointer-events: auto;
 }
 
-.drawer.is-dragged,
-.drawer.is-open.is-dragged {
-  transform: none;
+.drawer.is-dragged {
+  transition: none;
 }
 
 .drawer-head {

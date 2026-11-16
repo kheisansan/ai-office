@@ -8,7 +8,7 @@ import {
   assertSafeWriteTarget,
   ensureDir,
   readJson,
-  readText,
+  readTextWithin,
   writeJson,
   writeText,
 } from "../lib/fsutil.js";
@@ -156,7 +156,7 @@ export function appendQueryLog(answerDir: string, vaultPath: string): void {
   const vaultFile = path.join(vaultPath, "log.md");
   assertSafeWriteTarget(vaultFile, [vaultPath]);
   ensureDir(path.dirname(vaultFile));
-  const patch = readText(patchFile);
+  const patch = readTextWithin(patchFile, answerDir);
   if (fs.existsSync(vaultFile)) {
     fs.appendFileSync(vaultFile, patch.startsWith("\n") ? patch : `\n${patch}`);
   } else {
@@ -195,7 +195,7 @@ async function runAnswer(
 
   const feedbackPath = path.join(answerDir, "citation-feedback.md");
   const feedback = fs.existsSync(feedbackPath)
-    ? fs.readFileSync(feedbackPath, "utf8")
+    ? readTextWithin(feedbackPath, answerDir)
     : "";
   const prompt = [
     buildAnswererPrompt(answerDir),
@@ -274,7 +274,7 @@ export async function runAsk(
 
       await runAnswer(config, answerDir, question, candidates, aiMode, attempt);
 
-      const answerMd = readText(path.join(answerDir, "answer.md"));
+      const answerMd = readTextWithin(path.join(answerDir, "answer.md"), answerDir);
       checks = verifyCitations(answerMd, candidates.candidates);
       writeJson(path.join(answerDir, "checks.json"), checks);
 
@@ -360,7 +360,8 @@ export function readAskState(config: OfficeConfig, askId: string): AskState {
 
 export function readAskAnswer(config: OfficeConfig, askId: string): string {
   const id = assertSafeJobId(askId);
-  const p = path.join(answerDirFor(config, id), "answer.md");
+  const answerDir = answerDirFor(config, id);
+  const p = path.join(answerDir, "answer.md");
   if (!fs.existsSync(p)) throw new Error(`No answer.md for ${id}`);
-  return readText(p);
+  return readTextWithin(p, answerDir);
 }
