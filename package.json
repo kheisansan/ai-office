@@ -1,0 +1,37 @@
+{
+  "name": "ai-office",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Knowledge-management AI Office \u2014 portfolio of graph design, harness, and grounded RAG over a personal LLM Wiki.",
+  "type": "module",
+  "bin": {
+    "office": "./bin/office.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "office": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "serve": "tsx src/cli.ts serve",
+    "publish:scan": "bash scripts/publish-scan.sh",
+    "demo:smoke": "bash scripts/demo-smoke.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.15.29",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.3.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  },
+  "dependencies": {
+    "express": "^5.3.0"
+  },
+  "license": "MIT"
+}

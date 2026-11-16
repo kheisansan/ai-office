@@ -1,0 +1,10 @@
+{
+  "vaultPath": "/Users/YOU/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/YourVault",
+  "dataDir": "/Users/YOU/ai-office-data",
+  "ingestBatchLimit": 3,
+  "ytDlpPath": "yt-dlp",
+  "claudePath": "claude",
+  "aiMode": "claude",
+  "weeklyIngestTokenBudget": 0,
+  "weeklyAskTokenBudget": 0
+}

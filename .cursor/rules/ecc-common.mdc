@@ -1,0 +1,8 @@
+---
+description: ECC common rules (vendored subset)
+globs: ["**/*"]
+alwaysApply: false
+---
+
+See `vendor/ecc/rules/common/` for coding-style, security, testing, and git-workflow guidance used by this project.
+Prefer those over inventing new process docs.

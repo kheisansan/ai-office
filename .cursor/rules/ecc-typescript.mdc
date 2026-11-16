@@ -1,0 +1,7 @@
+---
+description: ECC TypeScript rules (vendored subset)
+globs: ["**/*.{ts,tsx}"]
+alwaysApply: false
+---
+
+Follow `vendor/ecc/rules/typescript/` for TypeScript style, patterns, security, and testing.

@@ -1,0 +1,12 @@
+---
+description: Wiki category harness rules
+alwaysApply: true
+---
+
+# Wiki categories
+
+- Canonical list: `{VAULT}/_schema/wiki-categories.json` (harness-managed).
+- Drafts: `draft/Wiki/<Category>/<page>.md` only — never Wiki root.
+- Prefer existing categories; new category folders are allowed when none fit.
+- Do not edit `_schema/wiki-categories.json` in agent sessions — `applyDraft` updates it.
+- See `harness/README.md`.

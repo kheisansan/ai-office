@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+.DS_Store
+*.log
+coverage/
+.ai-office-data/
+tmp/
+.turbo/
+
+# Local Claude / Cursor caches (keep committed settings & rules)
+.claude/settings.local.json
+.cursor/mcp.json
+
+# Local vault / runtime settings (keep example committed)
+config/settings.json
+
+# Local runtime / publish audit artifacts
+.publish-scan-report.txt
+demo/out/
+
+# Accidental root copy (canonical: fixtures + vault/_schema)
+/_schema/

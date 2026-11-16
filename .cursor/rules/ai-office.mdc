@@ -1,0 +1,13 @@
+---
+description: AI Office portfolio project conventions
+alwaysApply: true
+---
+
+# AI Office
+
+- Development model: Cursor Auto. Do not burn Claude Pro quota on routine coding.
+- Operations AI employees use Claude Code (`claude -p`) with Pro login — separate from Cursor.
+- ECC is vendored selectively under `vendor/ecc` (rules/common, rules/typescript, and a few skills). Do not install full ECC profiles into this repo.
+- Never write personal vault contents, secrets, or `.env` into the repo.
+- AI must only write under job `draft/`. Vault applies go through `src/pipeline/apply.ts`.
+- Forbidden: `OpenClaw/` paths, file deletes in agent sessions.

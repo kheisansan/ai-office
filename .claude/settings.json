@@ -1,0 +1,37 @@
+{
+  "model": "sonnet",
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku",
+    "ECC_CONTEXT_MONITOR_COST_WARNINGS": "off",
+    "ECC_SESSION_START_MAX_CHARS": "2000"
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit(draft/**)",
+      "Write(draft/**)",
+      "Edit(**/queue/**/draft/**)",
+      "Write(**/queue/**/draft/**)"
+    ],
+    "deny": [
+      "WebSearch",
+      "WebFetch",
+      "Bash(rm *)",
+      "Bash(git clean *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/harness-guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
